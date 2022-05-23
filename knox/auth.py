@@ -1,8 +1,10 @@
 try:
     from hmac import compare_digest
 except ImportError:
+
     def compare_digest(a, b):
         return a == b
+
 
 import binascii
 
@@ -10,7 +12,8 @@ from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 from rest_framework import exceptions
 from rest_framework.authentication import (
-    BaseAuthentication, get_authorization_header,
+    BaseAuthentication,
+    get_authorization_header,
 )
 
 from knox.crypto import hash_token
@@ -20,7 +23,7 @@ from knox.signals import token_expired
 
 
 class TokenAuthentication(BaseAuthentication):
-    '''
+    """
     This authentication scheme uses Knox AuthTokens for authentication.
 
     Similar to DRF's TokenAuthentication, it overrides a large amount of that
@@ -30,7 +33,8 @@ class TokenAuthentication(BaseAuthentication):
     If successful
     - `request.user` will be a django `User` instance
     - `request.auth` will be an `AuthToken` instance
-    '''
+    """
+
     model = AuthToken
 
     def authenticate(self, request):
@@ -43,27 +47,27 @@ class TokenAuthentication(BaseAuthentication):
             # Authorization header is possibly for another backend
             return None
         if len(auth) == 1:
-            msg = _('Invalid token header. No credentials provided.')
+            msg = _("Invalid token header. No credentials provided.")
             raise exceptions.AuthenticationFailed(msg)
         elif len(auth) > 2:
-            msg = _('Invalid token header. '
-                    'Token string should not contain spaces.')
+            msg = _("Invalid token header. " "Token string should not contain spaces.")
             raise exceptions.AuthenticationFailed(msg)
 
         user, auth_token = self.authenticate_credentials(auth[1])
         return (user, auth_token)
 
     def authenticate_credentials(self, token):
-        '''
+        """
         Due to the random nature of hashing a value, this must inspect
         each auth_token individually to find the correct one.
 
         Tokens that have expired will be deleted and skipped
-        '''
-        msg = _('Invalid token.')
+        """
+        msg = _("Invalid token.")
         token = token.decode("utf-8")
         for auth_token in AuthToken.objects.filter(
-                token_key=token[:CONSTANTS.TOKEN_KEY_LENGTH]):
+            token_key=token[: CONSTANTS.TOKEN_KEY_LENGTH]
+        ):
             if self._cleanup_token(auth_token):
                 continue
 
@@ -80,16 +84,16 @@ class TokenAuthentication(BaseAuthentication):
     def renew_token(self, auth_token):
         current_expiry = auth_token.expiry
         new_expiry = timezone.now() + knox_settings.TOKEN_TTL
-        auth_token.expiry = new_expiry
-        # Throttle refreshing of token to avoid db writes
         delta = (new_expiry - current_expiry).total_seconds()
+        if delta < knox_settings.MIN_TOKEN_TL:
+            auth_token.expiry = new_expiry
+        # Throttle refreshing of token to avoid db writes
         if delta > knox_settings.MIN_REFRESH_INTERVAL:
-            auth_token.save(update_fields=('expiry',))
+            auth_token.save(update_fields=("expiry",))
 
     def validate_user(self, auth_token):
         if not auth_token.user.is_active:
-            raise exceptions.AuthenticationFailed(
-                _('User inactive or deleted.'))
+            raise exceptions.AuthenticationFailed(_("User inactive or deleted."))
         return (auth_token.user, auth_token)
 
     def authenticate_header(self, request):
@@ -101,13 +105,15 @@ class TokenAuthentication(BaseAuthentication):
                 if other_token.expiry < timezone.now():
                     other_token.delete()
                     username = other_token.user.get_username()
-                    token_expired.send(sender=self.__class__,
-                                       username=username, source="other_token")
+                    token_expired.send(
+                        sender=self.__class__, username=username, source="other_token"
+                    )
         if auth_token.expiry is not None:
             if auth_token.expiry < timezone.now():
                 username = auth_token.user.get_username()
                 auth_token.delete()
-                token_expired.send(sender=self.__class__,
-                                   username=username, source="auth_token")
+                token_expired.send(
+                    sender=self.__class__, username=username, source="auth_token"
+                )
                 return True
         return False
