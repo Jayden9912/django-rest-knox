@@ -83,7 +83,12 @@ class TokenAuthentication(BaseAuthentication):
 
     def renew_token(self, auth_token):
         current_expiry = auth_token.expiry
+        print(current_expiry)
         new_expiry = timezone.now() + knox_settings.TOKEN_TTL
+        print(timezone.now())
+        token_TL = current_expiry - timezone.now()
+        print(token_TL)
+        print(token_TL.total_seconds())
         delta = (new_expiry - current_expiry).total_seconds()
         if delta < knox_settings.MIN_TOKEN_TL:
             auth_token.expiry = new_expiry
